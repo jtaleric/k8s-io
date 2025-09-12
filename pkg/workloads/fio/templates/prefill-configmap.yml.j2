@@ -1,0 +1,40 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fio-prefill-{{ trunc_uuid }}
+  namespace: '{{ operator_namespace }}'
+data:
+# FIXME: I don't think prefill works correctly for a list of numjobs values, only for 1 of them
+{% for numjobs in workload_args.NumJobs %}
+  fiojob-prefill: |
+    [global]
+{% if workload_args.PVCVolumeMode and workload_args.PVCVolumeMode == "Block" %}
+    filename={{fio_path}}
+{% else %}
+    directory={{fio_path}}
+{% endif %}
+    filename_format=f.\$jobnum.\$filenum
+    clocksource=clock_gettime
+    kb_base=1000
+    unit_base=8
+    ioengine=libaio
+    size={{workload_args.FileSize}}
+{% if workload_args.PrefillBS %}
+    bs={{workload_args.PrefillBS}}
+{% else %}
+    bs=4096KiB
+{% endif %}
+    iodepth=1
+    direct=1
+    numjobs={{numjobs}}
+    
+    [write]
+    rw=write
+    create_on_open=1
+    fsync_on_close=1
+{% if workload_args.CmpRatio %}
+    buffer_compress_percentage={{ workload_args.CmpRatio }}
+    buffer_pattern=0xdeadface
+{% endif %}
+{% endfor %}

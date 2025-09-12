@@ -1,0 +1,83 @@
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  name: 'fio-server-{{ server_num }}-benchmark-{{ trunc_uuid }}'
+  namespace: '{{ operator_namespace }}'
+  labels:
+    benchmark-uuid: "{{ uuid }}"
+    app: "fio-benchmark-{{ trunc_uuid }}"
+{% if workload_args.Annotations or workload_args.ServerAnnotations %}
+  annotations:
+{% for annotation, value in workload_args.Annotations %}
+    "{{annotation}}": "{{value}}"
+{% endfor %}
+{% for annotation, value in workload_args.ServerAnnotations %}
+    "{{annotation}}": "{{value}}"
+{% endfor %}
+{% endif %}
+spec:
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+            - key: app
+              operator: In
+              values:
+              - fio-benchmark-{{ trunc_uuid }}
+          topologyKey: "kubernetes.io/hostname"
+{% if workload_args.RuntimeClass %}
+  runtimeClassName: "{{ workload_args.RuntimeClass }}"
+{% endif %}
+  containers:
+  - name: fio-server
+{% if workload_args.HostPath %}
+    securityContext:
+      privileged: true
+{% endif %}
+    image: {{ workload_args.Image | default('quay.io/cloud-bulldozer/fio:latest') }}
+    imagePullPolicy: Always
+    ports:
+      - containerPort: 8765
+    command: ["/bin/sh", "-c"]
+    args:
+      - "cd /tmp; fio --server"
+{% if workload_args.StorageClass or workload_args.HostPath %}
+{% if workload_args.PVCVolumeMode == "Block" %}
+    volumeDevices:
+{% else %}      
+    volumeMounts:
+{% endif %}      
+    - name: data-volume
+{% if workload_args.PVCVolumeMode == "Block" %}     
+      devicePath: "{{ fio_path }}"
+{% else %}
+      mountPath: "{{ fio_path }}"      
+{% endif %}
+{% endif %}
+  restartPolicy: Never
+{% if workload_args.NodeSelector %}
+  nodeSelector: 
+{% for label, value in workload_args.NodeSelector %}
+    {{ label | replace ("_", "-" )}}: {{ value }}
+{% endfor %}
+{% endif  %}
+{% if workload_args.Tolerations %}
+  tolerations:
+    {{ workload_args.Tolerations }}
+{% endif %}
+{% if workload_args.StorageClass %}
+  volumes:
+  - name: data-volume
+    persistentVolumeClaim:
+      claimName: fio-claim-{{ server_num }}-{{ trunc_uuid }}
+{% elif workload_args.HostPath %}
+  volumes:
+  - name: data-volume
+    hostPath:
+      path: {{ workload_args.HostPath }}
+      type: DirectoryOrCreate
+{% endif %}

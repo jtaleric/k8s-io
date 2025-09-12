@@ -1,0 +1,97 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fio-test-{{ trunc_uuid }}
+  namespace: '{{ operator_namespace }}'
+data:
+# FIXME: I don't think prefill works correctly for a list of numjobs values, only for 1 of them
+{% for numjobs in workload_args.NumJobs %}
+{% if workload_args.Prefill %}
+  fiojob-prefill: |
+    [global]
+{% if workload_args.PVCVolumeMode and workload_args.PVCVolumeMode == "Block" %}
+    filename={{fio_path}}
+{% else %}
+    directory={{fio_path}}
+{% endif %}
+    filename_format=f.\$jobnum.\$filenum
+    clocksource=clock_gettime
+    kb_base=1000
+    unit_base=8
+    ioengine=libaio
+    size={{workload_args.FileSize}}
+{% if workload_args.PrefillBS %}
+    bs={{workload_args.PrefillBS}}
+{% else %}
+    bs=4096KiB
+{% endif %}
+    iodepth=1
+    direct=1
+    numjobs={{numjobs}}
+    
+    [write]
+    rw=write
+    create_on_open=1
+    fsync_on_close=1
+{% if workload_args.CmpRatio %}
+    buffer_compress_percentage={{ workload_args.CmpRatio }}
+    buffer_pattern=0xdeadface
+{% endif %}
+{% endif %}
+{% if workload_args.BSRange %}
+{% set loopvar = workload_args.BSRange %}
+{% set loopvar_str = 'bsrange' %}
+{% elif workload_args.BS %}
+{% set loopvar = workload_args.BS %}
+{% set loopvar_str = 'bs' %}
+{% endif %}
+{% for i in loopvar %}
+{% for job in workload_args.Jobs %}
+  fiojob-{{job}}-{{i}}-{{numjobs}}: |
+    [global]
+{% if workload_args.PVCVolumeMode and workload_args.PVCVolumeMode == "Block" %}
+    filename={{fio_path}}
+{% else %}
+    directory={{fio_path}}
+{% endif %}
+    filename_format=f.\$jobnum.\$filenum
+    write_bw_log=fio
+    write_iops_log=fio
+    write_lat_log=fio
+{% if workload_args.LogSampleRate %}
+    log_avg_msec={{ workload_args.LogSampleRate }}
+{% endif %}
+{% if workload_args.LogHistMsec %}
+    write_hist_log=fio
+    log_hist_msec={{ workload_args.LogHistMsec }}
+{% endif %}
+    clocksource=clock_gettime
+    kb_base=1000
+    unit_base=8
+    ioengine=libaio
+    size={{workload_args.FileSize}}
+    {{loopvar_str}}={{i}}
+    iodepth={{workload_args.IODepth}}
+    direct=1
+    numjobs={{numjobs}}
+
+    [{{job}}]
+    rw={{job}}
+{% if global_overrides %}
+{% for override in global_overrides %}
+    {{ override }}
+{% endfor %}
+{% endif %}
+{% if job_params %}
+{% for match in job_params %}
+{% if match.JobnameMatch == job %}
+{% for param in match.Params %}
+    {{ param }}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endfor %}
+{% endfor %}

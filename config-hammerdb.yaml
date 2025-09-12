@@ -1,0 +1,71 @@
+# K8s-IO Configuration for HammerDB Benchmark
+namespace: "benchmark-hammerdb"
+test_user: "k8s-io-user"
+clustername: "my-cluster"
+
+# Workload configuration
+workload:
+  name: "hammerdb"
+  args:
+    # Basic HammerDB settings
+    kind: "pod"              # "pod" or "vm"
+    db_type: "pg"            # "pg", "mariadb", "mssql"
+    
+    # Database initialization and benchmarking flags
+    db_init: true            # Initialize database
+    db_benchmark: true       # Run benchmark
+    
+    # Job settings
+    job_timeout: 7200        # Overall job timeout (seconds)
+    
+    # Database connection settings
+    db_server: "postgresql.default.svc.cluster.local"  # Database server hostname/IP
+    db_port: 5432            # Database port
+    db_name: "tpcc"          # Database name
+    db_user: "postgres"      # Database user
+    db_password: "password"  # Database password
+    
+    # TPC-C specific settings
+    warehouses: 10           # Number of warehouses
+    virtual_users: 5         # Number of virtual users
+    rampup_time: 2           # Ramp-up time in minutes
+    duration: 10             # Test duration in minutes
+    
+    # Container settings
+    image: "quay.io/cloud-bulldozer/hammerdb:latest"  # HammerDB container image
+    
+    # VM settings (when kind=vm)
+    vm_image: "quay.io/kubevirt/fedora-container-disk-images:latest"
+    vm_cores: 2              # VM CPU cores
+    vm_memory: "4G"          # VM memory
+    vm_bus: "virtio"         # VM disk bus type
+    
+    # Client VM PVC settings (when kind=vm)
+    client_vm:
+      pvc: false             # Enable PVC for client VM
+      pvc_storageclass: "standard"     # Storage class for PVC
+      pvc_pvcaccessmode: "ReadWriteOnce"  # PVC access mode
+      pvc_pvcvolumemode: "Filesystem"     # PVC volume mode
+      pvc_storagesize: "10Gi"             # PVC size
+    
+    # Scheduling and placement
+    pin: false               # Pin to specific node
+    pin_node: ""             # Node to pin to
+    nodeselector:
+      node-type: "worker"
+    
+    # Debug settings
+    debug: false             # Enable debug mode
+
+# Optional Elasticsearch configuration
+elasticsearch:
+  url: "http://elasticsearch:9200"
+  index_name: "hammerdb-results"
+  verify_cert: false
+  parallel: true
+
+# Optional Prometheus configuration  
+prometheus:
+  es_url: "http://elasticsearch:9200"
+  es_parallel: true
+  prom_url: "http://prometheus:9090"

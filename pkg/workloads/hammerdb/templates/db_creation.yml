@@ -1,0 +1,58 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ ansible_operator_meta.name }}-creator-{{ trunc_uuid }}"
+  namespace: "{{ operator_namespace }}"
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ workload_args.job_timeout|default(3600) }}
+  template:
+    metadata:
+      labels:
+        app: hammerdb_creator-{{ trunc_uuid }}
+        type: {{ ansible_operator_meta.name }}-bench-creator-{{ trunc_uuid }}
+        benchmark-uuid: {{ uuid }}
+{% if workload_args.annotations is defined or workload_args.server_annotations is defined %}
+      annotations:
+{% for annotation, value in workload_args.annotations.items() %}
+        "{{annotation}}": "{{value}}"
+{% endfor %}
+{% for annotation, value in workload_args.server_annotations.items() %}
+        "{{annotation}}": "{{value}}"
+{% endfor %}
+{% endif %}
+    spec:
+{% if workload_args.pin is sameas true %}
+      nodeSelector:
+        kubernetes.io/hostname: '{{ workload_args.pin_node }}'
+{% endif %}
+{% if workload_args.runtime_class is defined %}
+      runtimeClassName: "{{ workload_args.runtime_class }}"
+{% endif %}
+      containers:
+      - name: hammerdb
+{% if workload_args.resources is sameas true %}
+        resources:
+          requests:
+            cpu: {{ workload_args.requests_cpu }}
+            memory: {{ workload_args.requests_memory }}
+          limits:
+            cpu: {{ workload_args.limits_cpu }}
+            memory: {{ workload_args.limits_memory }}
+{% endif %}
+        command: ["/bin/sh", "-c"]
+        args: ["/usr/local/bin/uid_entrypoint; cd /hammer; ./hammerdbcli auto /creator/createdb.tcl"]
+        image: {{ workload_args.image | default('quay.io/cloud-bulldozer/hammerdb:latest') }}
+        imagePullPolicy: Always
+        volumeMounts:
+        - name: hammerdb-creator-volume
+          mountPath: "/creator"
+          readOnly: false
+      volumes:
+      - name: hammerdb-creator-volume
+        configMap:
+          name: "{{ ansible_operator_meta.name }}-creator-{{ trunc_uuid }}"
+          defaultMode: 0640
+      restartPolicy: Never
+{% include "metadata.yml.j2" %}
