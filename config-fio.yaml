@@ -1,0 +1,82 @@
+# K8s-IO Configuration for FIO Distributed Benchmark
+namespace: "default"
+test_user: "k8s-io-user"
+clustername: "my-cluster"
+
+# Workload configuration
+workload:
+  name: "fio"
+  args:
+    # Basic FIO settings
+    kind: "pod"              # "pod" or "vm"
+    servers: 3               # Number of FIO server pods/VMs
+    samples: 1               # Number of test iterations
+    jobs: ["write", "read", "randwrite"]  # FIO job types
+    bs: ["4KiB"]             # Block sizes
+    numjobs: [1]             # Number of FIO processes per pod
+    iodepth: 1               # Queue depth
+    filesize: "1G"           # Size of files to test
+    
+    # Timing settings
+    read_runtime: 60         # Read test duration (seconds)
+    write_runtime: 60        # Write test duration (seconds)
+    read_ramp_time: 10       # Read ramp-up time (seconds)
+    write_ramp_time: 10      # Write ramp-up time (seconds)
+    job_timeout: 3600        # Overall job timeout (seconds)
+   
+    # Prefill settings
+    prefill: true            # Enable prefill
+    prefill_bs: "1024KiB"    # Prefill block size
+    post_prefill_sleep: 30   # Sleep after prefill (seconds)
+    
+    # Container settings
+    image: "quay.io/jtaleric/fio:latest"  # FIO container image
+    
+    # Logging and monitoring
+    log_sample_rate: 500     # I/O stat sample interval (ms)
+    fio_json_to_log: false # Log FIO JSON output
+    debug: false             # Enable debug mode
+    
+    # Cache drop settings
+    drop_cache_kernel: false    # Drop kernel cache
+    drop_cache_rook_ceph: false # Drop Ceph cache
+
+# FIO job parameters - critical for proper execution
+job_params:
+  - jobname_match: write
+    params:
+      - time_based=1
+      - fsync_on_close=1
+      - create_on_open=1
+      - runtime=60
+      - ramp_time=10
+  - jobname_match: read
+    params:
+      - time_based=1
+      - runtime=60
+      - ramp_time=10
+  - jobname_match: randwrite
+    params:
+      - time_based=1
+      - fsync_on_close=1
+      - create_on_open=1
+      - runtime=60
+      - ramp_time=10
+  - jobname_match: randread
+    params:
+      - time_based=1
+      - runtime=60
+      - ramp_time=10
+
+# Optional Elasticsearch configuration
+elasticsearch:
+  url: "http://elasticsearch:9200"
+  index_name: "fio-results"
+  verify_cert: false
+  parallel: true
+
+# Optional Prometheus configuration  
+prometheus:
+  es_url: "http://elasticsearch:9200"
+  es_parallel: true
+  prom_url: "http://prometheus:9090"

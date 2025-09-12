@@ -1,0 +1,86 @@
+---
+apiVersion: kubevirt.io/v1alpha3
+kind: VirtualMachineInstance
+metadata:
+  name: 'fio-server-{{ server_num }}-{{ trunc_uuid }}'
+  namespace: '{{ operator_namespace }}'
+  labels:
+    app: "fio-benchmark-{{ trunc_uuid }}"
+    benchmark-uuid: "{{ uuid }}"
+{% if workload_args.annotations is defined or workload_args.server_annotations is defined %}
+  annotations:
+{% for annotation, value in workload_args.annotations.items() %}
+    "{{annotation}}": "{{value}}"
+{% endfor %}
+{% for annotation, value in workload_args.server_annotations.items() %}
+    "{{annotation}}": "{{value}}"
+{% endfor %}
+{% endif %}
+spec:
+  domain:
+    cpu:
+      cores: {{ workload_args.vm_cores | default(1) }}
+    devices:
+      disks:
+        - disk:
+            bus: {{ workload_args.vm_bus | default('virtio') }}
+          name: registrydisk
+        - disk:
+            bus: {{ workload_args.vm_bus | default('virtio') }}
+          name: cloudinitdisk
+{% if workload_args.storageclass is defined
+    or workload_args.HostPath %}
+        - disk:
+            bus: {{ workload_args.vm_bus | default('virtio') }}
+          name: data-volume
+          serial: data
+{% else %}
+        - disk:
+            bus: {{ workload_args.vm_bus | default('virtio') }}
+          name: emptydisk
+          serial: data
+{% endif %}
+    resources:
+      requests:
+        memory: {{ workload_args.vm_memory | default('5G') }}
+  volumes:
+    - name: registrydisk
+      containerDisk:
+        image: {{ workload_args.VMImage | default('quay.io/kubevirt/fedora-container-disk-images:latest') }}
+    - name: cloudinitdisk
+      cloudInitNoCloud:
+        userData: |-
+          #cloud-config
+          password: ripsaw
+          chpasswd: { expire: False }
+          bootcmd:
+            - "mkdir -p {{ fio_path }} || true"
+            - "[ -e /dev/disk/by-id/*data ] && disk=$(shopt -s nullglob; basename /dev/disk/by-id/*data) && mkfs.ext4 /dev/disk/by-id/$disk && mount /dev/disk/by-id/$disk {{ fio_path }}"
+          runcmd:
+            - dnf install -y podman
+            - "img=`podman create {{ workload_args.image | default('quay.io/cloud-bulldozer/fio:latest') }}`"
+            - fs=`podman mount $img`
+            - "mkdir -p $fs/{{ fio_path }} || true"
+            - "mount -o bind /{{ fio_path }} $fs/{{ fio_path }}"
+            - "chroot $fs bash -c 'cd /{{ fio_path }}; fio --server'"
+{% if workload_args.storageclass is defined %}
+    - name: data-volume
+      persistentVolumeClaim:
+        claimName: fio-claim-{{ server_num }}-{{ trunc_uuid }}
+{% elif workload_args.HostPath %}
+    - name: data-volume
+      hostDisk:
+        path: "{{ workload_args.HostPath }}/fio-server-{{ server_num }}-{{ trunc_uuid }}"
+        capacity: {{ workload_args.storagesize | default("5Gi") }}
+        type: DiskOrCreate
+{% else %}
+    - name: emptydisk
+      emptyDisk:
+        capacity: {{ workload_args.storagesize | default("5Gi") }}
+{% endif %}
+{% if workload_args.nodeselector is defined %}
+  nodeSelector:
+{% for label, value in  workload_args.nodeselector.items() %}
+    {{ label | replace ("_", "-" )}}: {{ value }}
+{% endfor %}
+{% endif  %}
