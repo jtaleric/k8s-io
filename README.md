@@ -5,7 +5,7 @@
   <img src="logo/logo.png" alt="K8s-IO Logo" width="300"/>
 </p>
 
-K8s-IO is a lightweight Go-based tool for running benchmark workloads on Kubernetes clusters. It supports multiple benchmark types and uses existing Jinja templates from the benchmark-operator project.
+K8s-IO is a lightweight Go-based CLI tool for running benchmark workloads on Kubernetes clusters. Unlike operator-based solutions, it provides a simple command-line interface for executing benchmarks without requiring cluster-wide operator deployments. It supports multiple benchmark types and reuses existing Jinja templates from the benchmark-operator project.
 
 ## Supported Workloads
 
@@ -178,6 +178,14 @@ This project is licensed under the Apache License 2.0 - see the LICENSE file for
 
 ## Related Projects
 
-- [benchmark-operator](https://github.com/cloud-bulldozer/benchmark-operator) - Ansible-based benchmark operator
+- [benchmark-operator](https://github.com/cloud-bulldozer/benchmark-operator) - Ansible-based benchmark operator (this tool reuses its templates)
 - [FIO](https://github.com/axboe/fio) - Flexible I/O Tester
 - [HammerDB](https://www.hammerdb.com/) - Database load testing tool
+
+## Why K8s-IO vs benchmark-operator?
+
+K8s-IO provides a simpler alternative to the benchmark-operator for users who:
+- Want a lightweight CLI tool instead of a full operator
+- Don't need cluster-wide operator deployments
+- Prefer direct control over benchmark execution
+- Want to run benchmarks without operator overhead

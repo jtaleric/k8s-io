@@ -10,26 +10,12 @@ import (
 	"github.com/jtaleric/k8s-io/pkg/kubernetes"
 )
 
-// State represents the benchmark execution state
-type State string
-
-const (
-	StateBuilding           State = "Building"
-	StateStartingDB         State = "Starting DB"
-	StateDBCreating         State = "DB Creating"
-	StateStartingDBWorkload State = "Starting DB Workload"
-	StateRunning            State = "Running"
-	StateCompleted          State = "Completed"
-	StateFailed             State = "Failed"
-)
-
 // Workload implements the HammerDB benchmark workload
 type Workload struct {
 	k8sClient      *kubernetes.Client
 	templateEngine *TemplateEngine
 	config         *config.Config
 	hammerdbConfig *HammerDBConfig
-	state          State
 }
 
 // NewWorkload creates a new HammerDB workload
@@ -41,7 +27,6 @@ func NewWorkload(k8sClient *kubernetes.Client, cfg *config.Config, hammerdbConfi
 		templateEngine: templateEngine,
 		config:         cfg,
 		hammerdbConfig: hammerdbConfig,
-		state:          StateBuilding,
 	}, nil
 }
 
@@ -124,7 +109,6 @@ func (w *Workload) RunBenchmark(ctx context.Context) error {
 		}
 	}
 
-	w.state = StateCompleted
 	log.Println("HammerDB benchmark completed successfully!")
 
 	return nil
@@ -185,8 +169,6 @@ func (w *Workload) deployInfrastructure(ctx context.Context) error {
 func (w *Workload) runDBInitialization(ctx context.Context) error {
 	log.Println("Running database initialization...")
 
-	w.state = StateStartingDB
-
 	var dbCreationJob string
 	var err error
 
@@ -213,8 +195,6 @@ func (w *Workload) runDBInitialization(ctx context.Context) error {
 		return fmt.Errorf("failed to apply DB creation job: %w", err)
 	}
 
-	w.state = StateDBCreating
-
 	// Wait for DB creation to complete
 	jobName := fmt.Sprintf("hammerdb-creator-%s", w.config.GetTruncatedUUID())
 	timeout := time.Duration(w.hammerdbConfig.JobTimeout) * time.Second
@@ -230,8 +210,6 @@ func (w *Workload) runDBInitialization(ctx context.Context) error {
 // runBenchmark runs the main benchmark workload
 func (w *Workload) runBenchmark(ctx context.Context) error {
 	log.Println("Starting HammerDB benchmark workload...")
-
-	w.state = StateStartingDBWorkload
 
 	var workloadJob string
 	var err error
@@ -254,7 +232,6 @@ func (w *Workload) runBenchmark(ctx context.Context) error {
 		return fmt.Errorf("failed to apply workload job: %w", err)
 	}
 
-	w.state = StateRunning
 	log.Println("HammerDB benchmark workload started")
 
 	return nil
