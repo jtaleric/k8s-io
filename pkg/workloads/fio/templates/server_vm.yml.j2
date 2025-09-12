@@ -3,7 +3,7 @@ apiVersion: kubevirt.io/v1alpha3
 kind: VirtualMachineInstance
 metadata:
   name: 'fio-server-{{ server_num }}-{{ trunc_uuid }}'
-  namespace: '{{ operator_namespace }}'
+  namespace: '{{ namespace }}'
   labels:
     app: "fio-benchmark-{{ trunc_uuid }}"
     benchmark-uuid: "{{ uuid }}"

@@ -1,5 +1,5 @@
 # K8s-IO Configuration for FIO Distributed Benchmark
-namespace: "default"
+namespace: "fio-test"
 test_user: "k8s-io-user"
 clustername: "my-cluster"
 

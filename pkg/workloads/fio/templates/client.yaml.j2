@@ -3,7 +3,7 @@ kind: Job
 apiVersion: batch/v1
 metadata:
   name: 'fio-client-{{ trunc_uuid }}'
-  namespace: '{{ operator_namespace }}'
+  namespace: '{{ namespace }}'
 spec:
   backoffLimit: 0
   activeDeadlineSeconds: {{ workload_args.job_timeout|default(3600) }}
@@ -25,10 +25,24 @@ spec:
 {% if workload_args.RuntimeClass %}
       runtimeClassName: "{{ workload_args.RuntimeClass }}"
 {% endif %}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: fio-client
         image: {{ workload_args.Image | default('quay.io/cloud-bulldozer/fio:latest') }}
         imagePullPolicy: Always
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
         env:
           - name: uuid
             value: "{{ uuid }}"
@@ -118,4 +132,3 @@ spec:
           name: "fio-hosts-{{ trunc_uuid }}"
           defaultMode: 0777
       restartPolicy: Never
-{% include "metadata.yml.j2" %}

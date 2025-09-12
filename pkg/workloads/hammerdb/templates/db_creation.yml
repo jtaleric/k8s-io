@@ -2,8 +2,8 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: "{{ ansible_operator_meta.name }}-creator-{{ trunc_uuid }}"
-  namespace: "{{ operator_namespace }}"
+  name: "{{ workload_name }}-creator-{{ trunc_uuid }}"
+  namespace: "{{ namespace }}"
 spec:
   backoffLimit: 0
   activeDeadlineSeconds: {{ workload_args.job_timeout|default(3600) }}
@@ -11,7 +11,7 @@ spec:
     metadata:
       labels:
         app: hammerdb_creator-{{ trunc_uuid }}
-        type: {{ ansible_operator_meta.name }}-bench-creator-{{ trunc_uuid }}
+        type: {{ workload_name }}-bench-creator-{{ trunc_uuid }}
         benchmark-uuid: {{ uuid }}
 {% if workload_args.annotations is defined or workload_args.server_annotations is defined %}
       annotations:
@@ -52,7 +52,6 @@ spec:
       volumes:
       - name: hammerdb-creator-volume
         configMap:
-          name: "{{ ansible_operator_meta.name }}-creator-{{ trunc_uuid }}"
+          name: "{{ workload_name }}-creator-{{ trunc_uuid }}"
           defaultMode: 0640
       restartPolicy: Never
-{% include "metadata.yml.j2" %}

@@ -3,7 +3,7 @@ kind: Pod
 apiVersion: v1
 metadata:
   name: 'fio-server-{{ server_num }}-benchmark-{{ trunc_uuid }}'
-  namespace: '{{ operator_namespace }}'
+  namespace: '{{ namespace }}'
   labels:
     benchmark-uuid: "{{ uuid }}"
     app: "fio-benchmark-{{ trunc_uuid }}"
@@ -32,10 +32,25 @@ spec:
 {% if workload_args.RuntimeClass %}
   runtimeClassName: "{{ workload_args.RuntimeClass }}"
 {% endif %}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
   containers:
   - name: fio-server
-{% if workload_args.HostPath %}
     securityContext:
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 1000
+      capabilities:
+        drop:
+        - ALL
+{% if workload_args.HostPath %}
+      # Note: HostPath usage requires privileged access, which conflicts with restricted PodSecurity
+      # Consider using PVCs instead of HostPath for better security compliance
       privileged: true
 {% endif %}
     image: {{ workload_args.Image | default('quay.io/cloud-bulldozer/fio:latest') }}

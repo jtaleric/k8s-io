@@ -3,7 +3,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: fio-test-{{ trunc_uuid }}
-  namespace: '{{ operator_namespace }}'
+  namespace: '{{ namespace }}'
 data:
 # FIXME: I don't think prefill works correctly for a list of numjobs values, only for 1 of them
 {% for numjobs in workload_args.NumJobs %}

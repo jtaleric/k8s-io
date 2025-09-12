@@ -10,27 +10,12 @@ import (
 	"github.com/jtaleric/k8s-io/pkg/kubernetes"
 )
 
-// State represents the benchmark execution state
-type State string
-
-const (
-	StateBuilding        State = "Building"
-	StateStartingServers State = "StartingServers"
-	StateStartingClient  State = "StartingClient"
-	StatePrefilling      State = "Prefilling"
-	StateStartBenchmark  State = "StartBenchmark"
-	StateRunning         State = "Running"
-	StateCompleted       State = "Completed"
-	StateFailed          State = "Failed"
-)
-
 // Workload implements the FIO distributed benchmark workload
 type Workload struct {
 	k8sClient      *kubernetes.Client
 	templateEngine *TemplateEngine
 	config         *config.Config
 	fioConfig      *FIOConfig
-	state          State
 	podDetails     map[string]string
 }
 
@@ -43,7 +28,6 @@ func NewWorkload(k8sClient *kubernetes.Client, cfg *config.Config, fioConfig *FI
 		templateEngine: templateEngine,
 		config:         cfg,
 		fioConfig:      fioConfig,
-		state:          StateBuilding,
 		podDetails:     make(map[string]string),
 	}, nil
 }
@@ -166,7 +150,6 @@ func (w *Workload) RunBenchmark(ctx context.Context) error {
 		return fmt.Errorf("failed to wait for completion: %w", err)
 	}
 
-	w.state = StateCompleted
 	log.Println("Benchmark completed successfully!")
 
 	return nil
@@ -232,7 +215,6 @@ func (w *Workload) deployInfrastructure(ctx context.Context) error {
 		}
 	}
 
-	w.state = StateStartingServers
 	return nil
 }
 
@@ -258,7 +240,6 @@ func (w *Workload) waitForServers(ctx context.Context) error {
 	}
 
 	w.podDetails = podDetails
-	w.state = StateStartingClient
 
 	log.Printf("All %d servers are ready", len(podDetails))
 	return nil
@@ -296,8 +277,6 @@ func (w *Workload) createHostsConfigMap(ctx context.Context) error {
 func (w *Workload) runPrefill(ctx context.Context) error {
 	log.Println("Running prefill job...")
 
-	w.state = StatePrefilling
-
 	prefillClient, err := w.templateEngine.RenderFIOPrefillClient(w.config, w.fioConfig)
 	if err != nil {
 		return fmt.Errorf("failed to render prefill client: %w", err)
@@ -321,7 +300,6 @@ func (w *Workload) runPrefill(ctx context.Context) error {
 		time.Sleep(time.Duration(w.fioConfig.PostPrefillSleep) * time.Second)
 	}
 
-	w.state = StateStartBenchmark
 	log.Println("Prefill completed successfully")
 
 	return nil
@@ -330,10 +308,6 @@ func (w *Workload) runPrefill(ctx context.Context) error {
 // runBenchmarkClient runs the main benchmark client
 func (w *Workload) runBenchmarkClient(ctx context.Context) error {
 	log.Println("Starting benchmark client...")
-
-	if !w.fioConfig.Prefill {
-		w.state = StateStartBenchmark
-	}
 
 	client, err := w.templateEngine.RenderFIOClient(w.config, w.fioConfig, w.podDetails)
 	if err != nil {
@@ -344,7 +318,6 @@ func (w *Workload) runBenchmarkClient(ctx context.Context) error {
 		return fmt.Errorf("failed to apply client: %w", err)
 	}
 
-	w.state = StateRunning
 	log.Println("Benchmark client started")
 
 	return nil

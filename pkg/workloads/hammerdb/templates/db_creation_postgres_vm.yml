@@ -2,11 +2,11 @@
 apiVersion: kubevirt.io/v1alpha3
 kind: VirtualMachineInstance
 metadata:
-  name: "{{ ansible_operator_meta.name }}-workload-{{ trunc_uuid }}"
-  namespace: "{{ operator_namespace }}"
+  name: "{{ workload_name }}-workload-{{ trunc_uuid }}"
+  namespace: "{{ namespace }}"
   labels:
     app: hammerdb_workload-{{ trunc_uuid }}
-    type: {{ ansible_operator_meta.name }}-bench-workload-{{ trunc_uuid }}
+    type: {{ workload_name }}-bench-workload-{{ trunc_uuid }}
     benchmark-uuid: {{ uuid }}
 {% if workload_args.annotations is defined or workload_args.server_annotations is defined %}
   annotations:
@@ -109,13 +109,13 @@ spec:
           - redis-cli -h {{bo.resources[0].status.podIP}} set complete true
     name: cloudinitdisk
   - configMap:
-      name: "{{ ansible_operator_meta.name }}-creator-{{ trunc_uuid }}"
+      name: "{{ workload_name }}-creator-{{ trunc_uuid }}"
     name: hammerdb-creator-volume
   - configMap:
-      name: "{{ ansible_operator_meta.name }}-workload-{{ trunc_uuid }}"
+      name: "{{ workload_name }}-workload-{{ trunc_uuid }}"
     name: hammerdb-workload-volume
   - configMap:
-      name: "{{ ansible_operator_meta.name }}-postgres-workload-{{ trunc_uuid }}"
+      name: "{{ workload_name }}-postgres-workload-{{ trunc_uuid }}"
     name: hammerdb-postgres-workload-volume
 {% if workload_args.client_vm.pvc is sameas true %}
   - name: data-volume

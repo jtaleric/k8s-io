@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"github.com/jtaleric/k8s-io/pkg/config"
 	"github.com/flosch/pongo2/v6"
+	"github.com/jtaleric/k8s-io/pkg/config"
 )
 
 // TemplateEngine handles HammerDB template processing
@@ -131,7 +131,8 @@ func (e *TemplateEngine) createBaseContext(cfg *config.Config) pongo2.Context {
 		"trunc_uuid":                  cfg.GetTruncatedUUID(),
 		"test_user":                   cfg.TestUser,
 		"clustername":                 cfg.ClusterName,
-		"operator_namespace":          cfg.Namespace,
+		"namespace":                   cfg.Namespace,
+		"workload_name":               "hammerdb",
 		"kcache_drop_pod_ips":         cfg.KCacheDropPodIPs,
 		"kernel_cache_drop_svc_port":  cfg.KernelCacheDropSvcPort,
 		"ceph_osd_cache_drop_pod_ip":  cfg.CephOSDCacheDropPodIP,
@@ -152,7 +153,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: "claim-{{ trunc_uuid }}"
-  namespace: '{{ operator_namespace }}'
+  namespace: '{{ namespace }}'
   labels:
     app: "hammerdb-{{ trunc_uuid }}"
     benchmark-uuid: "{{ uuid }}"
@@ -201,7 +202,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: 'hammerdb-creator-{{ trunc_uuid }}'
-  namespace: '{{ operator_namespace }}'
+  namespace: '{{ namespace }}'
   labels:
     app: "hammerdb-{{ trunc_uuid }}"
     benchmark-uuid: "{{ uuid }}"
@@ -256,7 +257,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: 'hammerdb-workload-{{ trunc_uuid }}'
-  namespace: '{{ operator_namespace }}'
+  namespace: '{{ namespace }}'
   labels:
     app: "hammerdb-{{ trunc_uuid }}"
     benchmark-uuid: "{{ uuid }}"
@@ -307,7 +308,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: '%s-{{ trunc_uuid }}'
-  namespace: '{{ operator_namespace }}'
+  namespace: '{{ namespace }}'
   labels:
     app: "hammerdb-{{ trunc_uuid }}"
     benchmark-uuid: "{{ uuid }}"
