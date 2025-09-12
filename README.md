@@ -1,4 +1,9 @@
+
 # K8s-IO - Kubernetes Benchmark Tool
+
+<p align="center">
+  <img src="logo/logo.png" alt="K8s-IO Logo" width="300"/>
+</p>
 
 K8s-IO is a lightweight Go-based tool for running benchmark workloads on Kubernetes clusters. It supports multiple benchmark types and uses existing Jinja templates from the benchmark-operator project.
 
