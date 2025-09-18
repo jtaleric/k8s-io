@@ -1,6 +1,7 @@
 package fio
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
@@ -9,7 +10,30 @@ import (
 
 	"github.com/flosch/pongo2/v6"
 	"github.com/jtaleric/k8s-io/pkg/config"
+	"github.com/jtaleric/k8s-io/pkg/kubernetes"
 )
+
+// safeElasticsearch returns a safe Elasticsearch config or empty map if nil
+func safeElasticsearch(es *config.ElasticsearchConfig) interface{} {
+	if es == nil {
+		return map[string]interface{}{}
+	}
+	// Convert struct to map for better template compatibility
+	return map[string]interface{}{
+		"url":         es.URL,
+		"index_name":  es.IndexName,
+		"verify_cert": es.VerifyCert,
+		"parallel":    es.Parallel,
+	}
+}
+
+// safePrometheus returns a safe Prometheus config or empty map if nil
+func safePrometheus(prom interface{}) interface{} {
+	if prom == nil {
+		return map[string]interface{}{}
+	}
+	return prom
+}
 
 // TemplateEngine handles FIO template processing
 type TemplateEngine struct {
@@ -138,9 +162,27 @@ func (e *TemplateEngine) createBaseContext(cfg *config.Config) pongo2.Context {
 		"ceph_osd_cache_drop_pod_ip":  cfg.CephOSDCacheDropPodIP,
 		"ceph_cache_drop_svc_port":    cfg.CephCacheDropSvcPort,
 		"rook_ceph_drop_cache_pod_ip": cfg.RookCephDropCachePodIP,
-		"elasticsearch":               cfg.Elasticsearch,
-		"prometheus":                  cfg.Prometheus,
+		"elasticsearch":               safeElasticsearch(cfg.Elasticsearch),
+		"prometheus":                  safePrometheus(nil), // Will be set by createContextWithPrometheus
 	}
+}
+
+// createContextWithPrometheus creates context with discovered Prometheus info
+func (e *TemplateEngine) createContextWithPrometheus(cfg *config.Config, k8sClient interface{}) pongo2.Context {
+	templateContext := e.createBaseContext(cfg)
+
+	// Try to discover Prometheus if k8sClient is available
+	if client, ok := k8sClient.(*kubernetes.Client); ok {
+		ctx := context.Background()
+		if promInfo, err := client.DiscoverPrometheus(ctx); err == nil && promInfo.Found {
+			templateContext["prometheus"] = pongo2.Context{
+				"prom_url":   promInfo.URL,
+				"prom_token": promInfo.Token,
+			}
+		}
+	}
+
+	return templateContext
 }
 
 // RenderFIOConfigMap renders the FIO configuration map
@@ -184,6 +226,15 @@ func (e *TemplateEngine) RenderFIOServerVM(cfg *config.Config, fioConfig *FIOCon
 // RenderFIOClient renders the FIO client job
 func (e *TemplateEngine) RenderFIOClient(cfg *config.Config, fioConfig *FIOConfig, podDetails map[string]string) (string, error) {
 	context := e.createBaseContext(cfg)
+	context["workload_args"] = fioConfig
+	context["pod_details"] = podDetails
+
+	return e.RenderTemplate("client.yaml.j2", context)
+}
+
+// RenderFIOClientWithPrometheus renders the FIO client job with auto-discovered Prometheus
+func (e *TemplateEngine) RenderFIOClientWithPrometheus(cfg *config.Config, fioConfig *FIOConfig, podDetails map[string]string, k8sClient interface{}) (string, error) {
+	context := e.createContextWithPrometheus(cfg, k8sClient)
 	context["workload_args"] = fioConfig
 	context["pod_details"] = podDetails
 

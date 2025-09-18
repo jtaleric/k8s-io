@@ -24,9 +24,6 @@ type Config struct {
 	// Elasticsearch configuration (optional)
 	Elasticsearch *ElasticsearchConfig `yaml:"elasticsearch,omitempty"`
 
-	// Prometheus configuration (optional)
-	Prometheus *PrometheusConfig `yaml:"prometheus,omitempty"`
-
 	// Cache drop settings
 	KCacheDropPodIPs       string `yaml:"kcache_drop_pod_ips,omitempty"`
 	KernelCacheDropSvcPort int    `yaml:"kernel_cache_drop_svc_port,omitempty"`
@@ -50,14 +47,6 @@ type ElasticsearchConfig struct {
 	IndexName  string `yaml:"index_name,omitempty"`
 	VerifyCert bool   `yaml:"verify_cert,omitempty"`
 	Parallel   bool   `yaml:"parallel,omitempty"`
-}
-
-// PrometheusConfig represents Prometheus settings
-type PrometheusConfig struct {
-	ESURL      string `yaml:"es_url,omitempty"`
-	ESParallel bool   `yaml:"es_parallel,omitempty"`
-	PromToken  string `yaml:"prom_token,omitempty"`
-	PromURL    string `yaml:"prom_url,omitempty"`
 }
 
 // JobParam represents FIO job parameters

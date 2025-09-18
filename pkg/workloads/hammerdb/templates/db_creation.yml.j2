@@ -10,9 +10,9 @@ spec:
   template:
     metadata:
       labels:
-        app: hammerdb_creator-{{ trunc_uuid }}
-        type: {{ workload_name }}-bench-creator-{{ trunc_uuid }}
-        benchmark-uuid: {{ uuid }}
+        app: "hammerdb_creator-{{ trunc_uuid }}"
+        type: "{{ workload_name }}-bench-creator-{{ trunc_uuid }}"
+        benchmark-uuid: "{{ uuid }}"
 {% if workload_args.annotations is defined or workload_args.server_annotations is defined %}
       annotations:
 {% for annotation, value in workload_args.annotations.items() %}

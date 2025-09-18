@@ -96,7 +96,7 @@ func (w *Workload) GenerateManifests() (map[string]string, error) {
 		mockPodDetails[fmt.Sprintf("10.0.0.%d", i)] = fmt.Sprintf("worker-%d", i)
 	}
 
-	client, err := w.templateEngine.RenderFIOClient(w.config, w.fioConfig, mockPodDetails)
+	client, err := w.templateEngine.RenderFIOClientWithPrometheus(w.config, w.fioConfig, mockPodDetails, w.k8sClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to render client: %w", err)
 	}
@@ -309,7 +309,7 @@ func (w *Workload) runPrefill(ctx context.Context) error {
 func (w *Workload) runBenchmarkClient(ctx context.Context) error {
 	log.Println("Starting benchmark client...")
 
-	client, err := w.templateEngine.RenderFIOClient(w.config, w.fioConfig, w.podDetails)
+	client, err := w.templateEngine.RenderFIOClientWithPrometheus(w.config, w.fioConfig, w.podDetails, w.k8sClient)
 	if err != nil {
 		return fmt.Errorf("failed to render client: %w", err)
 	}

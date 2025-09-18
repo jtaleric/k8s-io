@@ -5,9 +5,9 @@ metadata:
   name: "{{ workload_name }}-workload-{{ trunc_uuid }}"
   namespace: "{{ namespace }}"
   labels:
-    app: hammerdb_workload-{{ trunc_uuid }}
-    type: {{ workload_name }}-bench-workload-{{ trunc_uuid }}
-    benchmark-uuid: {{ uuid }}
+    app: "hammerdb_workload-{{ trunc_uuid }}"
+    type: "{{ workload_name }}-bench-workload-{{ trunc_uuid }}"
+    benchmark-uuid: "{{ uuid }}"
 {% if workload_args.annotations is defined or workload_args.server_annotations is defined %}
   annotations:
 {% for annotation, value in workload_args.annotations.items() %}

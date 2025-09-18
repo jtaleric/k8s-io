@@ -13,6 +13,39 @@ import (
 	"github.com/jtaleric/k8s-io/pkg/workloads/hammerdb"
 )
 
+// safeElasticsearch returns a safe Elasticsearch config or empty map if nil
+func safeElasticsearch(es *config.ElasticsearchConfig) interface{} {
+	if es == nil {
+		return map[string]interface{}{}
+	}
+	// Convert struct to map for better template compatibility
+	return map[string]interface{}{
+		"url":         es.URL,
+		"index_name":  es.IndexName,
+		"verify_cert": es.VerifyCert,
+		"parallel":    es.Parallel,
+	}
+}
+
+// safePrometheus returns a safe Prometheus config or empty map if nil
+func safePrometheus(prom interface{}) interface{} {
+	if prom == nil {
+		return map[string]interface{}{}
+	}
+	return prom
+}
+
+// indentContent indents each line of content with the specified prefix
+func indentContent(content, prefix string) string {
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		if line != "" { // Don't indent empty lines
+			lines[i] = prefix + line
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 // Engine handles template processing
 type Engine struct {
 	templatesDir string
@@ -140,8 +173,8 @@ func (e *Engine) createBaseContext(cfg *config.Config) pongo2.Context {
 		"ceph_osd_cache_drop_pod_ip":  cfg.CephOSDCacheDropPodIP,
 		"ceph_cache_drop_svc_port":    cfg.CephCacheDropSvcPort,
 		"rook_ceph_drop_cache_pod_ip": cfg.RookCephDropCachePodIP,
-		"elasticsearch":               cfg.Elasticsearch,
-		"prometheus":                  cfg.Prometheus,
+		"elasticsearch":               safeElasticsearch(cfg.Elasticsearch),
+		"prometheus":                  safePrometheus(nil), // Prometheus auto-discovery not implemented in main engine
 	}
 }
 
@@ -334,9 +367,11 @@ metadata:
     benchmark-uuid: "{{ uuid }}"
 data:
   createdb.tcl: |
-{{ script_content | indent:"    " }}`
+{{ script_content | safe }}`
 
-	context["script_content"] = scriptContent
+	// Manually indent the script content since Pongo2 doesn't have an indent filter
+	indentedScript := indentContent(scriptContent, "    ")
+	context["script_content"] = indentedScript
 
 	template, err := e.templateSet.FromString(configMapTemplate)
 	if err != nil {
@@ -389,9 +424,11 @@ metadata:
     benchmark-uuid: "{{ uuid }}"
 data:
   %s: |
-{{ script_content | indent:"    " }}`, scriptKey)
+{{ script_content | safe }}`, scriptKey)
 
-	context["script_content"] = scriptContent
+	// Manually indent the script content since Pongo2 doesn't have an indent filter
+	indentedScript := indentContent(scriptContent, "    ")
+	context["script_content"] = indentedScript
 
 	template, err := e.templateSet.FromString(configMapTemplate)
 	if err != nil {
@@ -440,9 +477,11 @@ metadata:
     benchmark-uuid: "{{ uuid }}"
 data:
   %s: |
-{{ script_content | indent:"    " }}`, configMapName, scriptKey)
+{{ script_content | safe }}`, configMapName, scriptKey)
 
-	context["script_content"] = scriptContent
+	// Manually indent the script content since Pongo2 doesn't have an indent filter
+	indentedScript := indentContent(scriptContent, "    ")
+	context["script_content"] = indentedScript
 
 	template, err := e.templateSet.FromString(configMapTemplate)
 	if err != nil {
@@ -458,7 +497,7 @@ func (e *Engine) RenderHammerDBCreateJob(cfg *config.Config, hammerdbConfig *ham
 	context["workload_args"] = hammerdbConfig
 	context["resource_kind"] = hammerdbConfig.Kind
 
-	return e.RenderTemplate("db_creation.yml", context)
+	return e.RenderTemplate("db_creation.yml.j2", context)
 }
 
 // RenderHammerDBCreateJobVM renders the HammerDB database creation job for VMs
@@ -467,7 +506,7 @@ func (e *Engine) RenderHammerDBCreateJobVM(cfg *config.Config, hammerdbConfig *h
 	context["workload_args"] = hammerdbConfig
 	context["resource_kind"] = "vm"
 
-	templateFile := fmt.Sprintf("db_creation_%s_vm.yml", dbType)
+	templateFile := fmt.Sprintf("db_creation_%s_vm.yml.j2", dbType)
 	return e.RenderTemplate(templateFile, context)
 }
 
