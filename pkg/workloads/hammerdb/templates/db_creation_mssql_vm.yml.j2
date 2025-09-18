@@ -2,12 +2,12 @@
 apiVersion: kubevirt.io/v1alpha3
 kind: VirtualMachineInstance
 metadata:
-  name: {{ workload_name }}-workload-{{ trunc_uuid }}
+  name: "{{ workload_name }}-workload-{{ trunc_uuid }}"
   namespace: "{{ namespace }}"
   labels:
-    app: hammerdb_workload-{{ trunc_uuid }}
-    type: {{ workload_name }}-bench-workload-{{ trunc_uuid }}
-    benchmark-uuid: {{ uuid }}
+    app: "hammerdb_workload-{{ trunc_uuid }}"
+    type: "{{ workload_name }}-bench-workload-{{ trunc_uuid }}"
+    benchmark-uuid: "{{ uuid }}"
 {% if workload_args.annotations is defined or workload_args.server_annotations is defined %}
   annotations:
 {% for annotation, value in workload_args.annotations.items() %}
@@ -44,7 +44,7 @@ spec:
         # set serial
         serial: CVLY623300HK240D
       - disk: {}
-        name: hammerdb-mariadb-workload-volume
+        name: hammerdb-mssql-workload-volume
         # set serial
         serial: CVLY623300HK240E
 {% if workload_args.client_vm.pvc is sameas true
@@ -88,15 +88,16 @@ spec:
           - "mount /dev/$(lsblk --nodeps -no name,serial | grep CVLY623300HK240C | cut -f1 -d' ') /creator"
           - "mkdir /workload"
           - "mount /dev/$(lsblk --nodeps -no name,serial | grep CVLY623300HK240D | cut -f1 -d' ') /workload"
-          - "mkdir /tmp/hammerdb-mariadb-test"
-          - "mount /dev/$(lsblk --nodeps -no name,serial | grep CVLY623300HK240E | cut -f1 -d' ') /tmp/hammerdb-mariadb-test"
+          - "mkdir /tmp/hammerdb-mssql-test"
+          - "mount /dev/$(lsblk --nodeps -no name,serial | grep CVLY623300HK240E | cut -f1 -d' ') /tmp/hammerdb-mssql-test"
         runcmd:
 {% if workload_args.client_vm.pvc is sameas true
     or workload_args.client_vm.hostpath is sameas true %}
-          - "mkdir -p /var/lib/mysql || true"
+          - "mkdir -p /var/opt/mssql || true"
           - mkfs.ext4 /dev/disk/by-id/virtio-data
-          - "mount /dev/disk/by-id/virtio-data /var/lib/mysql"
-          - "chown -R mysql:mysql /var/lib/mysql"
+          - "mount /dev/disk/by-id/virtio-data /var/opt/mssql"
+          - "chown -R mssql:mssql /var/opt/mssql"
+          - "chgrp mssql /var/opt/mssql"
 {% endif %}
 {% if workload_args.client_vm.network.multiqueue.enabled %}
           - dnf install -y ethtool
@@ -105,7 +106,7 @@ spec:
           - dnf install -y redis
           - systemctl start redis
           - systemctl enable redis
-          - bash /tmp/hammerdb-mariadb-test/run_mariadb_script.sh
+          - bash /tmp/hammerdb-mssql-test/run_mssql_script.sh
           - redis-cli -h {{bo.resources[0].status.podIP}} set complete true
     name: cloudinitdisk
   - configMap:
@@ -115,8 +116,8 @@ spec:
       name: "{{ workload_name }}-workload-{{ trunc_uuid }}"
     name: hammerdb-workload-volume
   - configMap:
-      name: "{{ workload_name }}-mariadb-workload-{{ trunc_uuid }}"
-    name: hammerdb-mariadb-workload-volume
+      name: "{{ workload_name }}-mssql-workload-{{ trunc_uuid }}"
+    name: hammerdb-mssql-workload-volume
 {% if workload_args.client_vm.pvc is sameas true %}
   - name: data-volume
     persistentVolumeClaim:

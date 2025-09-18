@@ -23,6 +23,13 @@ import (
 	"k8s.io/client-go/util/homedir"
 )
 
+// PrometheusInfo holds discovered Prometheus configuration
+type PrometheusInfo struct {
+	URL   string
+	Token string
+	Found bool
+}
+
 // Client wraps Kubernetes client functionality
 type Client struct {
 	clientset     kubernetes.Interface
@@ -320,4 +327,133 @@ func getGVKForKind(kind string) schema.GroupVersionKind {
 	default:
 		return schema.GroupVersionKind{Group: "", Version: "v1", Kind: kind}
 	}
+}
+
+// DiscoverPrometheus attempts to discover Prometheus configuration in the cluster
+func (c *Client) DiscoverPrometheus(ctx context.Context) (*PrometheusInfo, error) {
+	info := &PrometheusInfo{Found: false}
+
+	// Common Prometheus service names and namespaces to check
+	targets := []struct {
+		namespace   string
+		serviceName string
+		port        string
+	}{
+		{"openshift-monitoring", "prometheus-k8s", "9090"},
+		{"monitoring", "prometheus-server", "80"},
+		{"prometheus", "prometheus-server", "9090"},
+		{"kube-system", "prometheus", "9090"},
+		{"default", "prometheus", "9090"},
+	}
+
+	for _, target := range targets {
+		// Try to get the service
+		service, err := c.clientset.CoreV1().Services(target.namespace).Get(ctx, target.serviceName, metav1.GetOptions{})
+		if err != nil {
+			continue // Service not found, try next target
+		}
+
+		// Found a Prometheus service
+		info.Found = true
+		info.URL = fmt.Sprintf("http://%s.%s.svc.cluster.local:%s", service.Name, service.Namespace, target.port)
+
+		// Try to get service account token for Prometheus access
+		token, err := c.getPrometheusToken(ctx, target.namespace)
+		if err == nil {
+			info.Token = token
+		}
+
+		return info, nil
+	}
+
+	// If no service found, try to detect Prometheus via routes (OpenShift)
+	if routeInfo, err := c.discoverPrometheusRoute(ctx); err == nil && routeInfo.Found {
+		return routeInfo, nil
+	}
+
+	return info, nil
+}
+
+// getPrometheusToken attempts to get a service account token for Prometheus access
+func (c *Client) getPrometheusToken(ctx context.Context, namespace string) (string, error) {
+	// Try common service account names used by Prometheus
+	saNames := []string{"prometheus", "prometheus-server", "default"}
+
+	for _, saName := range saNames {
+		sa, err := c.clientset.CoreV1().ServiceAccounts(namespace).Get(ctx, saName, metav1.GetOptions{})
+		if err != nil {
+			continue
+		}
+
+		// Get the first secret (token) associated with this service account
+		if len(sa.Secrets) > 0 {
+			secretName := sa.Secrets[0].Name
+			secret, err := c.clientset.CoreV1().Secrets(namespace).Get(ctx, secretName, metav1.GetOptions{})
+			if err != nil {
+				continue
+			}
+
+			if token, exists := secret.Data["token"]; exists {
+				return string(token), nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("no service account token found for Prometheus")
+}
+
+// discoverPrometheusRoute attempts to discover Prometheus via OpenShift routes
+func (c *Client) discoverPrometheusRoute(ctx context.Context) (*PrometheusInfo, error) {
+	info := &PrometheusInfo{Found: false}
+
+	// Try to get Prometheus route in openshift-monitoring namespace
+	routeGVR := schema.GroupVersionResource{
+		Group:    "route.openshift.io",
+		Version:  "v1",
+		Resource: "routes",
+	}
+
+	routes, err := c.dynamicClient.Resource(routeGVR).Namespace("openshift-monitoring").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return info, err
+	}
+
+	for _, route := range routes.Items {
+		if strings.Contains(route.GetName(), "prometheus") {
+			if spec, found, err := unstructured.NestedMap(route.Object, "spec"); found && err == nil {
+				if host, exists := spec["host"].(string); exists {
+					info.Found = true
+					info.URL = fmt.Sprintf("https://%s", host)
+
+					// For OpenShift, try to get the current user's token
+					if token, err := c.getCurrentUserToken(ctx); err == nil {
+						info.Token = token
+					}
+
+					return info, nil
+				}
+			}
+		}
+	}
+
+	return info, nil
+}
+
+// getCurrentUserToken gets the current user's token for API access
+func (c *Client) getCurrentUserToken(ctx context.Context) (string, error) {
+	// Try to read token from service account
+	tokenPath := "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	if _, err := os.Stat(tokenPath); err == nil {
+		tokenBytes, err := os.ReadFile(tokenPath)
+		if err == nil {
+			return string(tokenBytes), nil
+		}
+	}
+
+	// If running outside cluster, try to get token from kubeconfig
+	if c.config.BearerToken != "" {
+		return c.config.BearerToken, nil
+	}
+
+	return "", fmt.Errorf("no authentication token available")
 }

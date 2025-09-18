@@ -5,10 +5,22 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/flosch/pongo2/v6"
 	"github.com/jtaleric/k8s-io/pkg/config"
 )
+
+// indentContent indents each line of content with the specified prefix
+func indentContent(content, prefix string) string {
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		if line != "" { // Don't indent empty lines
+			lines[i] = prefix + line
+		}
+	}
+	return strings.Join(lines, "\n")
+}
 
 // TemplateEngine handles HammerDB template processing
 type TemplateEngine struct {
@@ -139,7 +151,6 @@ func (e *TemplateEngine) createBaseContext(cfg *config.Config) pongo2.Context {
 		"ceph_cache_drop_svc_port":    cfg.CephCacheDropSvcPort,
 		"rook_ceph_drop_cache_pod_ip": cfg.RookCephDropCachePodIP,
 		"elasticsearch":               cfg.Elasticsearch,
-		"prometheus":                  cfg.Prometheus,
 	}
 }
 
@@ -208,9 +219,11 @@ metadata:
     benchmark-uuid: "{{ uuid }}"
 data:
   createdb.tcl: |
-{{ script_content | indent:"    " }}`
+{{ script_content | safe }}`
 
-	context["script_content"] = scriptContent
+	// Manually indent the script content since Pongo2 doesn't have an indent filter
+	indentedScript := indentContent(scriptContent, "    ")
+	context["script_content"] = indentedScript
 
 	template, err := e.templateSet.FromString(configMapTemplate)
 	if err != nil {
@@ -263,9 +276,11 @@ metadata:
     benchmark-uuid: "{{ uuid }}"
 data:
   %s: |
-{{ script_content | indent:"    " }}`, scriptKey)
+{{ script_content | safe }}`, scriptKey)
 
-	context["script_content"] = scriptContent
+	// Manually indent the script content since Pongo2 doesn't have an indent filter
+	indentedScript := indentContent(scriptContent, "    ")
+	context["script_content"] = indentedScript
 
 	template, err := e.templateSet.FromString(configMapTemplate)
 	if err != nil {
@@ -314,9 +329,11 @@ metadata:
     benchmark-uuid: "{{ uuid }}"
 data:
   %s: |
-{{ script_content | indent:"    " }}`, configMapName, scriptKey)
+{{ script_content | safe }}`, configMapName, scriptKey)
 
-	context["script_content"] = scriptContent
+	// Manually indent the script content since Pongo2 doesn't have an indent filter
+	indentedScript := indentContent(scriptContent, "    ")
+	context["script_content"] = indentedScript
 
 	template, err := e.templateSet.FromString(configMapTemplate)
 	if err != nil {
@@ -332,7 +349,7 @@ func (e *TemplateEngine) RenderHammerDBCreateJob(cfg *config.Config, hammerdbCon
 	context["workload_args"] = hammerdbConfig
 	context["resource_kind"] = hammerdbConfig.Kind
 
-	return e.RenderTemplate("db_creation.yml", context)
+	return e.RenderTemplate("db_creation.yml.j2", context)
 }
 
 // RenderHammerDBCreateJobVM renders the HammerDB database creation job for VMs
