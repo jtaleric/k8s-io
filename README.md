@@ -69,6 +69,8 @@ workload:
     numjobs: [1, 2]          # FIO processes per pod
     filesize: "1G"           # File size for testing
     storageclass: "fast-ssd" # Kubernetes storage class
+    fio_path: "/data"        # Path where FIO tests run (optional)
+                             # Defaults: /tmp for pods, /test for VMs  
     prefill: true            # Enable prefill
 ```
 

@@ -181,7 +181,7 @@ func (e *Engine) createBaseContext(cfg *config.Config) pongo2.Context {
 // FIO-specific template rendering methods
 
 // RenderFIOConfigMap renders the FIO configuration map
-func (e *Engine) RenderFIOConfigMap(cfg *config.Config, fioConfig interface{}) (string, error) {
+func (e *Engine) RenderFIOConfigMap(cfg *config.Config, fioConfig *fio.FIOConfig) (string, error) {
 	context := e.createBaseContext(cfg)
 	context["workload_args"] = fioConfig
 	context["fio_path"] = fioConfig.GetFIOPath()

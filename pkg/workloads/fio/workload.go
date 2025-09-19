@@ -266,8 +266,7 @@ func (w *Workload) createHostsConfigMap(ctx context.Context) error {
 	// Wait for FIO server port if VMs
 	if w.fioConfig.Kind == "vm" {
 		log.Println("Waiting for FIO server port 8765 to be ready on VMs...")
-		// Note: In a real implementation, you would add port checking logic here
-		time.Sleep(30 * time.Second) // Simple wait for demo purposes
+		time.Sleep(30 * time.Second)
 	}
 
 	return nil
