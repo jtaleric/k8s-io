@@ -59,9 +59,9 @@ spec:
             - dnf install -y podman
             - "img=`podman create {{ workload_args.image | default('quay.io/jtaleric/fio:latest') }}`"
             - fs=`podman mount $img`
-            - "mkdir -p $fs/{{ fio_path }} || true"
-            - "mount -o bind /{{ fio_path }} $fs/{{ fio_path }}"
-            - "chroot $fs bash -c 'cd /{{ fio_path }}; fio --server'"
+            - "mkdir -p $fs{{ fio_path }} || true"
+            - "mount -o bind {{ fio_path }} $fs{{ fio_path }}"
+            - "chroot $fs bash -c 'cd {{ fio_path }}; fio --server'"
 {% if workload_args.storageclass is defined %}
     - name: data-volume
       persistentVolumeClaim:

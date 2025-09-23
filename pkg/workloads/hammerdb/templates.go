@@ -1,15 +1,17 @@
 package hammerdb
 
 import (
+	"embed"
 	"fmt"
-	"io/ioutil"
-	"path/filepath"
 	"regexp"
 	"strings"
 
 	"github.com/flosch/pongo2/v6"
 	"github.com/jtaleric/k8s-io/pkg/config"
 )
+
+//go:embed templates/*.j2
+var embeddedTemplates embed.FS
 
 // indentContent indents each line of content with the specified prefix
 func indentContent(content, prefix string) string {
@@ -24,26 +26,26 @@ func indentContent(content, prefix string) string {
 
 // TemplateEngine handles HammerDB template processing
 type TemplateEngine struct {
-	templatesDir string
-	templateSet  *pongo2.TemplateSet
+	templateSet *pongo2.TemplateSet
 }
 
 // NewTemplateEngine creates a new HammerDB template engine
 func NewTemplateEngine(templatesDir string) *TemplateEngine {
-	templateSet := pongo2.NewSet("hammerdb-templates", pongo2.MustNewLocalFileSystemLoader(templatesDir))
+	// Note: templatesDir parameter is kept for backward compatibility but not used
+	// Templates are now embedded in the binary
+	templateSet := pongo2.NewSet("hammerdb-templates", nil)
 
 	return &TemplateEngine{
-		templatesDir: templatesDir,
-		templateSet:  templateSet,
+		templateSet: templateSet,
 	}
 }
 
 // LoadTemplate loads and preprocesses a template file
 func (e *TemplateEngine) LoadTemplate(templatePath string) (*pongo2.Template, error) {
-	fullPath := filepath.Join(e.templatesDir, templatePath)
-	content, err := ioutil.ReadFile(fullPath)
+	// Read from embedded filesystem
+	content, err := embeddedTemplates.ReadFile("templates/" + templatePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read template file %s: %w", fullPath, err)
+		return nil, fmt.Errorf("failed to read embedded template file %s: %w", templatePath, err)
 	}
 
 	// Preprocess Jinja2 syntax to Pongo2 compatible syntax
@@ -358,7 +360,7 @@ func (e *TemplateEngine) RenderHammerDBCreateJobVM(cfg *config.Config, hammerdbC
 	context["workload_args"] = hammerdbConfig
 	context["resource_kind"] = "vm"
 
-	templateFile := fmt.Sprintf("db_creation_%s_vm.yml", dbType)
+	templateFile := fmt.Sprintf("db_creation_%s_vm.yml.j2", dbType)
 	return e.RenderTemplate(templateFile, context)
 }
 

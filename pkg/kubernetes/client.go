@@ -264,7 +264,7 @@ func (c *Client) WaitForPodsReady(ctx context.Context, namespace string, labelSe
 
 // WaitForJobCompletion waits for a job to complete with retry logic for network resilience
 func (c *Client) WaitForJobCompletion(ctx context.Context, name, namespace string, timeout time.Duration) error {
-	return wait.PollImmediate(10*time.Second, timeout, func() (bool, error) {
+	return wait.PollImmediate(60*time.Second, timeout, func() (bool, error) {
 		job, err := c.GetJob(ctx, name, namespace)
 		if err != nil {
 			if isTransientError(err) {

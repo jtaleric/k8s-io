@@ -2,9 +2,8 @@ package fio
 
 import (
 	"context"
+	"embed"
 	"fmt"
-	"io/ioutil"
-	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -12,6 +11,9 @@ import (
 	"github.com/jtaleric/k8s-io/pkg/config"
 	"github.com/jtaleric/k8s-io/pkg/kubernetes"
 )
+
+//go:embed templates/*.j2
+var embeddedTemplates embed.FS
 
 // safeElasticsearch returns a safe Elasticsearch config or empty map if nil
 func safeElasticsearch(es *config.ElasticsearchConfig) interface{} {
@@ -37,26 +39,26 @@ func safePrometheus(prom interface{}) interface{} {
 
 // TemplateEngine handles FIO template processing
 type TemplateEngine struct {
-	templatesDir string
-	templateSet  *pongo2.TemplateSet
+	templateSet *pongo2.TemplateSet
 }
 
 // NewTemplateEngine creates a new FIO template engine
 func NewTemplateEngine(templatesDir string) *TemplateEngine {
-	templateSet := pongo2.NewSet("fio-templates", pongo2.MustNewLocalFileSystemLoader(templatesDir))
+	// Note: templatesDir parameter is kept for backward compatibility but not used
+	// Templates are now embedded in the binary
+	templateSet := pongo2.NewSet("fio-templates", nil)
 
 	return &TemplateEngine{
-		templatesDir: templatesDir,
-		templateSet:  templateSet,
+		templateSet: templateSet,
 	}
 }
 
 // LoadTemplate loads and preprocesses a template file
 func (e *TemplateEngine) LoadTemplate(templatePath string) (*pongo2.Template, error) {
-	fullPath := filepath.Join(e.templatesDir, templatePath)
-	content, err := ioutil.ReadFile(fullPath)
+	// Read from embedded filesystem
+	content, err := embeddedTemplates.ReadFile("templates/" + templatePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read template file %s: %w", fullPath, err)
+		return nil, fmt.Errorf("failed to read embedded template file %s: %w", templatePath, err)
 	}
 
 	// Preprocess Jinja2 syntax to Pongo2 compatible syntax
@@ -209,6 +211,7 @@ func (e *TemplateEngine) RenderFIOServer(cfg *config.Config, fioConfig *FIOConfi
 	context := e.createBaseContext(cfg)
 	context["workload_args"] = fioConfig
 	context["server_num"] = serverNum
+	context["fio_path"] = fioConfig.GetFIOPath()
 
 	return e.RenderTemplate("servers.yaml.j2", context)
 }
@@ -219,6 +222,7 @@ func (e *TemplateEngine) RenderFIOServerVM(cfg *config.Config, fioConfig *FIOCon
 	context["workload_args"] = fioConfig
 	context["server_num"] = serverNum
 	context["resource_kind"] = "vm"
+	context["fio_path"] = fioConfig.GetFIOPath()
 
 	return e.RenderTemplate("server_vm.yml.j2", context)
 }

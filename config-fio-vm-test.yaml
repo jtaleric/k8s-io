@@ -1,0 +1,44 @@
+# K8s-IO Configuration for FIO VM Test
+namespace: "fio-test"
+test_user: "k8s-io-user"
+clustername: "my-cluster"
+
+# Workload configuration
+workload:
+  name: "fio"
+  args:
+    # Basic FIO settings
+    kind: "vm"               # "pod" or "vm"
+    servers: 1               # Number of FIO server VMs
+    samples: 1               # Number of test iterations
+    jobs: ["write"]          # FIO job types
+    bs: ["4KiB"]             # Block sizes
+    numjobs: [1]             # Number of FIO processes per VM
+    iodepth: 1               # Queue depth
+    filesize: "1G"           # Size of files to test
+    
+    # Timing settings
+    write_runtime: 60        # Write test duration (seconds)
+    write_ramp_time: 10      # Write ramp-up time (seconds)
+    job_timeout: 3600        # Overall job timeout (seconds)
+   
+    # Container settings
+    image: "quay.io/jtaleric/fio:latest"  # FIO container image
+    
+    # VM settings
+    vm_image: "quay.io/kubevirt/fedora-container-disk-images:latest"
+    vm_cores: 1
+    vm_memory: "2G"
+    
+    # Storage path settings - this should default to /test for VMs
+    # fio_path: "/test"  # Should be automatically set for VMs
+
+# FIO job parameters
+job_params:
+  - jobname_match: write
+    params:
+      - time_based=1
+      - fsync_on_close=1
+      - create_on_open=1
+      - runtime=60
+      - ramp_time=10
