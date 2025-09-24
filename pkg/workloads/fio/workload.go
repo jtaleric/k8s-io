@@ -133,6 +133,12 @@ func (w *Workload) RunBenchmark(ctx context.Context) error {
 		return fmt.Errorf("failed to create hosts configmap: %w", err)
 	}
 
+	// Phase 3: Wait for server check job to complete
+	timeout := time.Duration(300) * time.Second
+	if err := w.k8sClient.WaitForJobCompletion(ctx, "fio-check-"+w.config.GetTruncatedUUID(), w.config.Namespace, timeout); err != nil {
+		return fmt.Errorf("server check job failed: %w", err)
+	}
+
 	// Phase 4: Run prefill if enabled
 	if w.fioConfig.Prefill {
 		if err := w.runPrefill(ctx); err != nil {
@@ -215,7 +221,24 @@ func (w *Workload) deployInfrastructure(ctx context.Context) error {
 		}
 	}
 
+	// Deploy server check job
+	serverCheck, err := w.templateEngine.RenderFIOServerCheck(w.config, w.fioConfig)
+	if err != nil {
+		return fmt.Errorf("failed to render server check: %w", err)
+	}
+	if err := w.k8sClient.ApplyManifest(ctx, serverCheck, w.config.Namespace); err != nil {
+		return fmt.Errorf("failed to apply server check: %w", err)
+	}
+
 	return nil
+}
+
+// RenderFIOServerCheck renders the FIO server check job
+func (e *TemplateEngine) RenderFIOServerCheck(cfg *config.Config, fioConfig *FIOConfig) (string, error) {
+	context := e.createBaseContext(cfg)
+	context["workload_args"] = fioConfig
+
+	return e.RenderTemplate("server-check.yaml.j2", context)
 }
 
 // waitForServers waits for all FIO servers to be ready
@@ -266,8 +289,7 @@ func (w *Workload) createHostsConfigMap(ctx context.Context) error {
 	// Wait for FIO server port if VMs
 	if w.fioConfig.Kind == "vm" {
 		log.Println("Waiting for FIO server port 8765 to be ready on VMs...")
-		// Note: In a real implementation, you would add port checking logic here
-		time.Sleep(30 * time.Second) // Simple wait for demo purposes
+		time.Sleep(30 * time.Second)
 	}
 
 	return nil

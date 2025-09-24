@@ -3,6 +3,8 @@ package kubernetes
 import (
 	"context"
 	"fmt"
+	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,6 +30,39 @@ type PrometheusInfo struct {
 	URL   string
 	Token string
 	Found bool
+}
+
+// isTransientError checks if an error is likely transient and should be retried
+func isTransientError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errStr := err.Error()
+	// Network-related errors that are often transient
+	transientErrors := []string{
+		"client connection lost",
+		"connection reset by peer",
+		"timeout",
+		"temporary failure",
+		"network is unreachable",
+		"no route to host",
+		"connection refused",
+		"i/o timeout",
+	}
+
+	for _, transientErr := range transientErrors {
+		if strings.Contains(strings.ToLower(errStr), transientErr) {
+			return true
+		}
+	}
+
+	// Check for network-related error types
+	if _, ok := err.(net.Error); ok {
+		return true
+	}
+
+	return false
 }
 
 // Client wraps Kubernetes client functionality
@@ -197,12 +232,19 @@ func (c *Client) GetJob(ctx context.Context, name, namespace string) (*batchv1.J
 	return c.clientset.BatchV1().Jobs(namespace).Get(ctx, name, metav1.GetOptions{})
 }
 
-// WaitForPodsReady waits for pods to be ready
+// WaitForPodsReady waits for pods to be ready with retry logic for network resilience
 func (c *Client) WaitForPodsReady(ctx context.Context, namespace string, labelSelector string, expectedCount int, timeout time.Duration) error {
 	return wait.PollImmediate(5*time.Second, timeout, func() (bool, error) {
 		pods, err := c.ListPods(ctx, namespace, labelSelector)
 		if err != nil {
-			return false, err
+			if isTransientError(err) {
+				// Log transient errors but continue retrying
+				log.Printf("Warning: Transient error listing pods with selector %s (will retry): %v", labelSelector, err)
+				return false, nil
+			} else {
+				// Non-transient errors should fail immediately
+				return false, fmt.Errorf("failed to list pods: %w", err)
+			}
 		}
 
 		readyCount := 0
@@ -212,20 +254,32 @@ func (c *Client) WaitForPodsReady(ctx context.Context, namespace string, labelSe
 			}
 		}
 
+		if readyCount < expectedCount {
+			log.Printf("Waiting for pods: %d/%d ready (selector: %s)", readyCount, expectedCount, labelSelector)
+		}
+
 		return readyCount >= expectedCount, nil
 	})
 }
 
-// WaitForJobCompletion waits for a job to complete
+// WaitForJobCompletion waits for a job to complete with retry logic for network resilience
 func (c *Client) WaitForJobCompletion(ctx context.Context, name, namespace string, timeout time.Duration) error {
-	return wait.PollImmediate(10*time.Second, timeout, func() (bool, error) {
+	return wait.PollImmediate(60*time.Second, timeout, func() (bool, error) {
 		job, err := c.GetJob(ctx, name, namespace)
 		if err != nil {
-			return false, err
+			if isTransientError(err) {
+				// Log transient errors but continue retrying
+				log.Printf("Warning: Transient error getting job %s status (will retry): %v", name, err)
+				return false, nil
+			} else {
+				// Non-transient errors should fail immediately
+				return false, fmt.Errorf("failed to get job: %w", err)
+			}
 		}
 
 		// Check if job completed successfully
 		if job.Status.Succeeded > 0 {
+			log.Printf("Job %s completed successfully", name)
 			return true, nil
 		}
 
@@ -234,6 +288,9 @@ func (c *Client) WaitForJobCompletion(ctx context.Context, name, namespace strin
 			return false, fmt.Errorf("job %s failed", name)
 		}
 
+		// Job is still running
+		log.Printf("Job %s still running (succeeded: %d, failed: %d, active: %d)",
+			name, job.Status.Succeeded, job.Status.Failed, job.Status.Active)
 		return false, nil
 	})
 }
@@ -323,7 +380,7 @@ func getGVKForKind(kind string) schema.GroupVersionKind {
 	case "PersistentVolumeClaim":
 		return schema.GroupVersionKind{Group: "", Version: "v1", Kind: "PersistentVolumeClaim"}
 	case "VirtualMachineInstance":
-		return schema.GroupVersionKind{Group: "kubevirt.io", Version: "v1alpha3", Kind: "VirtualMachineInstance"}
+		return schema.GroupVersionKind{Group: "kubevirt.io", Version: "v1", Kind: "VirtualMachineInstance"}
 	default:
 		return schema.GroupVersionKind{Group: "", Version: "v1", Kind: kind}
 	}

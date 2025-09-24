@@ -28,6 +28,7 @@ type FIOConfig struct {
 	PVCAccessMode string `yaml:"pvcaccessmode,omitempty"` // PVC access mode
 	PVCVolumeMode string `yaml:"pvcvolumemode,omitempty"` // PVC volume mode
 	HostPath      string `yaml:"hostpath,omitempty"`      // Host path for storage
+	FIOPath       string `yaml:"fio_path,omitempty"`      // Path where FIO tests run (defaults: /tmp for pods, /test for VMs)
 
 	// Prefill settings
 	Prefill          bool   `yaml:"prefill,omitempty"`            // Enable prefill
@@ -94,7 +95,7 @@ func (f *FIOConfig) SetDefaults() {
 	}
 
 	if f.Image == "" {
-		f.Image = "quay.io/cloud-bulldozer/fio:latest"
+		f.Image = "quay.io/jtaleric/fio:latest"
 	}
 
 	if f.VMImage == "" {
@@ -122,7 +123,7 @@ func (f *FIOConfig) SetDefaults() {
 	}
 
 	if f.StorageSize == "" {
-		f.StorageSize = "5Gi"
+		f.StorageSize = "10Gi"
 	}
 
 	if f.PrefillBS == "" {
@@ -157,8 +158,16 @@ func (f *FIOConfig) Validate() error {
 
 // GetFIOPath returns the FIO path based on storage configuration
 func (f *FIOConfig) GetFIOPath() string {
-	if f.StorageClass != "" {
-		return "/dev/xvda"
+	// If user explicitly set fio_path, use it
+	if f.FIOPath != "" {
+		return f.FIOPath
 	}
+
+	// Default based on workload kind
+	if f.Kind == "vm" {
+		return "/test"
+	}
+
+	// Default for pods
 	return "/tmp"
 }

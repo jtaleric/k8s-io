@@ -1,0 +1,48 @@
+---
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: 'fio-check-{{ trunc_uuid }}'
+  namespace: '{{ namespace }}'
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ workload_args.job_timeout|default(3600) }}
+  template:
+    metadata:
+      labels:
+        benchmark-uuid: "{{ uuid }}"
+        app: "fiod-check-client-{{ trunc_uuid }}"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: fio-check
+        image: {{ workload_args.Image | default('quay.io/cloud-bulldozer/fio:latest') }}
+        imagePullPolicy: Always
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+        command: ["/bin/sh", "-c"]
+        args:
+          - "cd /tmp;
+             curl -O https://raw.githubusercontent.com/vishnubob/wait-for-it/refs/heads/master/wait-for-it.sh;
+             chmod +x wait-for-it.sh;
+             for host in $(cat /tmp/host/hosts); do 
+               ./wait-for-it.sh -h $host -p 8765 -t 300;
+             done"
+        volumeMounts:
+        - name: host-volume
+          mountPath: "/tmp/host"
+      volumes:
+      - name: host-volume
+        configMap:
+          name: "fio-hosts-{{ trunc_uuid }}"
+          defaultMode: 0777
+      restartPolicy: Never

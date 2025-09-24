@@ -32,6 +32,10 @@ workload:
     # Container settings
     image: "quay.io/jtaleric/fio:latest"  # FIO container image
     
+    # Storage path settings
+    # fio_path: "/custom/path"           # Custom path for FIO tests (optional)
+                                         # Defaults: /tmp for pods, /test for VMs
+    
     # Logging and monitoring
     log_sample_rate: 500     # I/O stat sample interval (ms)
     fio_json_to_log: false # Log FIO JSON output
