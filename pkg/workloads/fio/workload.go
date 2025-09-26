@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/jtaleric/k8s-io/pkg/config"
@@ -356,7 +357,35 @@ func (w *Workload) waitForCompletion(ctx context.Context) error {
 		return fmt.Errorf("benchmark job failed: %w", err)
 	}
 
-	log.Println("Benchmark completed successfully!")
+	// Capture and parse results
+	log.Println("Capturing benchmark results...")
+	if err := w.captureResults(ctx, jobName); err != nil {
+		log.Printf("Warning: Failed to capture results: %v", err)
+		// Don't fail the benchmark if result capture fails
+	}
+
+	return nil
+}
+
+// captureResults captures and parses FIO results from the client job logs
+func (w *Workload) captureResults(ctx context.Context, jobName string) error {
+	// Get logs from the job
+	logs, err := w.k8sClient.GetJobPodLogs(ctx, jobName, w.config.Namespace)
+	if err != nil {
+		return fmt.Errorf("failed to get job logs: %w", err)
+	}
+
+	// Generate a test ID for this run
+	testID := fmt.Sprintf("%s_%s_%s_%d",
+		w.config.GetTruncatedUUID(),
+		strings.Join(w.fioConfig.Jobs, "-"),
+		strings.Join(w.fioConfig.BS, "-"),
+		w.fioConfig.NumJobs[0], // Use first numjobs value
+	)
+
+	// Parse and display results
+	CaptureFIOResults(logs, testID)
+
 	return nil
 }
 

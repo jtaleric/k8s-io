@@ -173,15 +173,35 @@ func (e *TemplateEngine) createBaseContext(cfg *config.Config) pongo2.Context {
 func (e *TemplateEngine) createContextWithPrometheus(cfg *config.Config, k8sClient interface{}) pongo2.Context {
 	templateContext := e.createBaseContext(cfg)
 
-	// Try to discover Prometheus if k8sClient is available
-	if client, ok := k8sClient.(*kubernetes.Client); ok {
+	// Handle Prometheus configuration (user-provided or auto-discovered)
+	var prometheusContext pongo2.Context
+
+	// Check if user provided Prometheus configuration directly
+	if cfg.Prometheus != nil && cfg.Prometheus.URL != "" {
+		prometheusContext = pongo2.Context{
+			"url":        cfg.Prometheus.URL,
+			"prom_token": cfg.Prometheus.Token,
+		}
+	} else if client, ok := k8sClient.(*kubernetes.Client); ok {
+		// Try to auto-discover Prometheus
 		ctx := context.Background()
-		if promInfo, err := client.DiscoverPrometheus(ctx); err == nil && promInfo.Found {
-			templateContext["prometheus"] = pongo2.Context{
-				"prom_url":   promInfo.URL,
+		if promInfo, err := client.DiscoverPrometheusWithConfig(ctx, cfg.Prometheus); err == nil && promInfo.Found {
+			prometheusContext = pongo2.Context{
+				"url":        promInfo.URL,
 				"prom_token": promInfo.Token,
 			}
 		}
+	}
+
+	// If we have Prometheus context, add Elasticsearch configuration and set it
+	if prometheusContext != nil {
+		// Add Elasticsearch configuration if available
+		if cfg.Elasticsearch != nil && cfg.Elasticsearch.URL != "" {
+			prometheusContext["es_url"] = cfg.Elasticsearch.URL
+			prometheusContext["es_parallel"] = cfg.Elasticsearch.Parallel
+		}
+
+		templateContext["prometheus"] = prometheusContext
 	}
 
 	return templateContext
