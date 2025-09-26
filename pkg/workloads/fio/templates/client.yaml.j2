@@ -69,10 +69,14 @@ spec:
             value: "{{ elasticsearch.parallel | default(false) }}"
 {% endif %}
 {% if prometheus is defined %}
+          - name: prom_es
+            value: "{{ prometheus.es_url }}"
+          - name: prom_parallel
+            value: "{{ prometheus.es_parallel | default(true) }}"
           - name: prom_token
             value: "{{ prometheus.prom_token | default() }}"
           - name: prom_url
-            value: "{{ prometheus.prom_url | default() }}"
+            value: "{{ prometheus.url | default() }}"
 {% endif %}
         command: ["/bin/sh", "-c"]
         args:
@@ -82,12 +86,18 @@ spec:
 {% for i in workload_args.BSRange %}
 {% for job in workload_args.Jobs %}
              cat /tmp/fio/fiojob-{{job}}-{{i}}-{{numjobs}}; mkdir -p /tmp/fiod-{{uuid}}/fiojob-{{job}}-{{i}}-{{numjobs}};
-             run_snafu -t fio -H /tmp/host/hosts -j /tmp/fio/fiojob-{{job}}-{{i}}-{{numjobs}} -s {{workload_args.Samples}} -d /tmp/fiod-{{ uuid }}/fiojob-{{job}}-{{i}}-{{numjobs}} -v;
+             run_snafu -t fio -H /tmp/host/hosts -j /tmp/fio/fiojob-{{job}}-{{i}}-{{numjobs}} -s {{workload_args.Samples}} -d /tmp/fiod-{{ uuid }}/fiojob-{{job}}-{{i}}-{{numjobs}} ;
+             for fio_sample in $(seq 1 {{workload_args.Samples}});
+             do 
+               echo 'FIO Result for {{uuid}}_{{job}}_{{i}}_{{numjobs}}-$fio_sample';
+               cat /tmp/fiod-{{ uuid }}/fiojob-{{job}}-{{i}}-{{numjobs}}/$fio_sample/{{job}}/fio-result.json;
+               echo 'END FIO Result for {{uuid}}_{{job}}_{{i}}_{{numjobs}}-$fio_sample';
+             done;
 {% if workload_args.FioJSONToLog %}
              for fio_sample in $(seq 1 {{workload_args.Samples}});
-             do echo START_FIO_JSON_OUTPUT_fiod-{{uuid}}_fiojob-{{job}}-{{i}}-{{numjobs}}_SAMPLE_$fio_sample;
+             do echo START_FIO_JSON_OUTPUT_fiod-{{uuid}}_fiojob-{{job}}-{{i}}-{{numjobs}}_SAMPLE_${fio_sample};
              test -f /tmp/fiod-{{uuid}}/fiojob-{{job}}-{{i}}-{{numjobs}}/$fio_sample/{{job}}/fio-result.json && cat /tmp/fiod-{{uuid}}/fiojob-{{job}}-{{i}}-{{numjobs}}/$fio_sample/{{job}}/fio-result.json || echo ERROR_FIO_JSON_FILE_NOT_AVAILABLE;
-             echo END_FIO_JSON_OUTPUT_fiod-{{uuid}}_fiojob-{{job}}-{{i}}-{{numjobs}}_SAMPLE_$fio_sample;done;
+             echo END_FIO_JSON_OUTPUT_fiod-{{uuid}}_fiojob-{{job}}-{{i}}-{{numjobs}}_SAMPLE_${fio_sample};done;
 {% endif %}
 {% endfor %}
 {% endfor %}
@@ -97,7 +107,13 @@ spec:
 {% for i in workload_args.BS %}
 {% for job in workload_args.Jobs %}
              cat /tmp/fio/fiojob-{{job}}-{{i}}-{{numjobs}}; mkdir -p /tmp/fiod-{{uuid}}/fiojob-{{job}}-{{i}}-{{numjobs}};
-             run_snafu -t fio -H /tmp/host/hosts -j /tmp/fio/fiojob-{{job}}-{{i}}-{{numjobs}} -s {{workload_args.Samples}} -d /tmp/fiod-{{ uuid }}/fiojob-{{job}}-{{i}}-{{numjobs}} -v;
+             run_snafu -t fio -H /tmp/host/hosts -j /tmp/fio/fiojob-{{job}}-{{i}}-{{numjobs}} -s {{workload_args.Samples}} -d /tmp/fiod-{{ uuid }}/fiojob-{{job}}-{{i}}-{{numjobs}} ;
+             for fio_sample in $(seq 1 {{workload_args.Samples}});
+             do 
+               echo 'FIO Result for {{uuid}}_{{job}}_{{i}}_{{numjobs}}-${fio_sample}';
+               cat /tmp/fiod-{{ uuid }}/fiojob-{{job}}-{{i}}-{{numjobs}}/$fio_sample/{{job}}/fio-result.json;
+               echo 'END FIO Result for {{uuid}}_{{job}}_{{i}}_{{numjobs}}-${fio_sample}';
+             done;
 {% if workload_args.FioJSONToLog %}
              for fio_sample in $(seq 1 {{workload_args.Samples}});
              do echo START_FIO_JSON_OUTPUT_fiod-{{uuid}}_fiojob-{{job}}-{{i}}-{{numjobs}}_SAMPLE_$fio_sample;

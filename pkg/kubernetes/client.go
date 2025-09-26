@@ -1,8 +1,10 @@
 package kubernetes
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -23,6 +25,8 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
+
+	"github.com/jtaleric/k8s-io/pkg/config"
 )
 
 // PrometheusInfo holds discovered Prometheus configuration
@@ -388,7 +392,29 @@ func getGVKForKind(kind string) schema.GroupVersionKind {
 
 // DiscoverPrometheus attempts to discover Prometheus configuration in the cluster
 func (c *Client) DiscoverPrometheus(ctx context.Context) (*PrometheusInfo, error) {
+	return c.DiscoverPrometheusWithConfig(ctx, nil)
+}
+
+// DiscoverPrometheusWithConfig attempts to discover Prometheus with optional user configuration
+func (c *Client) DiscoverPrometheusWithConfig(ctx context.Context, promConfig interface{}) (*PrometheusInfo, error) {
 	info := &PrometheusInfo{Found: false}
+
+	// Check if user provided Prometheus configuration
+	if promConfig != nil {
+		if promCfg, ok := promConfig.(*config.PrometheusConfig); ok && promCfg != nil && promCfg.URL != "" {
+			info.Found = true
+			info.URL = promCfg.URL
+			if promCfg.Token != "" {
+				info.Token = promCfg.Token
+			} else {
+				// Try to get a token for the user-provided Prometheus
+				if token, err := c.getPrometheusToken(ctx, "default"); err == nil {
+					info.Token = token
+				}
+			}
+			return info, nil
+		}
+	}
 
 	// Common Prometheus service names and namespaces to check
 	targets := []struct {
@@ -396,11 +422,11 @@ func (c *Client) DiscoverPrometheus(ctx context.Context) (*PrometheusInfo, error
 		serviceName string
 		port        string
 	}{
-		{"openshift-monitoring", "prometheus-k8s", "9090"},
-		{"monitoring", "prometheus-server", "80"},
-		{"prometheus", "prometheus-server", "9090"},
-		{"kube-system", "prometheus", "9090"},
-		{"default", "prometheus", "9090"},
+		{"openshift-monitoring", "prometheus-k8s", "9091"},
+		{"monitoring", "prometheus-server", "9091"},
+		{"prometheus", "prometheus-server", "9091"},
+		{"kube-system", "prometheus", "9091"},
+		{"default", "prometheus", "9091"},
 	}
 
 	for _, target := range targets {
@@ -433,8 +459,13 @@ func (c *Client) DiscoverPrometheus(ctx context.Context) (*PrometheusInfo, error
 
 // getPrometheusToken attempts to get a service account token for Prometheus access
 func (c *Client) getPrometheusToken(ctx context.Context, namespace string) (string, error) {
-	// Try common service account names used by Prometheus
-	saNames := []string{"prometheus", "prometheus-server", "default"}
+	// First, try to create our own service account and token
+	if token, err := c.createK8sIOToken(ctx, namespace); err == nil {
+		return token, nil
+	}
+
+	// Fallback: Try common service account names used by Prometheus
+	saNames := []string{"prometheus", "prometheus-server", "default", "prometheus-k8s", "prometheus-operator"}
 
 	for _, saName := range saNames {
 		sa, err := c.clientset.CoreV1().ServiceAccounts(namespace).Get(ctx, saName, metav1.GetOptions{})
@@ -457,6 +488,72 @@ func (c *Client) getPrometheusToken(ctx context.Context, namespace string) (stri
 	}
 
 	return "", fmt.Errorf("no service account token found for Prometheus")
+}
+
+// createK8sIOToken creates a dedicated service account and token for k8s-io
+func (c *Client) createK8sIOToken(ctx context.Context, namespace string) (string, error) {
+	saName := "k8s-io-prometheus"
+	secretName := "k8s-io-prometheus-token"
+
+	// Create service account
+	sa := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      saName,
+			Namespace: namespace,
+			Labels: map[string]string{
+				"app": "k8s-io",
+			},
+		},
+	}
+
+	// Try to create the service account (ignore if it already exists)
+	_, err := c.clientset.CoreV1().ServiceAccounts(namespace).Create(ctx, sa, metav1.CreateOptions{})
+	if err != nil && !apierrors.IsAlreadyExists(err) {
+		return "", fmt.Errorf("failed to create service account: %w", err)
+	}
+
+	// Create token secret for the service account
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: namespace,
+			Labels: map[string]string{
+				"app": "k8s-io",
+			},
+			Annotations: map[string]string{
+				"kubernetes.io/service-account.name": saName,
+			},
+		},
+		Type: corev1.SecretTypeServiceAccountToken,
+	}
+
+	_, err = c.clientset.CoreV1().Secrets(namespace).Create(ctx, secret, metav1.CreateOptions{})
+	if err != nil && !apierrors.IsAlreadyExists(err) {
+		return "", fmt.Errorf("failed to create token secret: %w", err)
+	}
+
+	// Wait for the token to be populated (Kubernetes automatically populates it)
+	var token string
+	for i := 0; i < 10; i++ { // Wait up to 10 seconds
+		secret, err := c.clientset.CoreV1().Secrets(namespace).Get(ctx, secretName, metav1.GetOptions{})
+		if err != nil {
+			time.Sleep(1 * time.Second)
+			continue
+		}
+
+		if tokenBytes, exists := secret.Data["token"]; exists && len(tokenBytes) > 0 {
+			token = string(tokenBytes)
+			break
+		}
+
+		time.Sleep(1 * time.Second)
+	}
+
+	if token == "" {
+		return "", fmt.Errorf("token was not populated in secret after waiting")
+	}
+
+	return token, nil
 }
 
 // discoverPrometheusRoute attempts to discover Prometheus via OpenShift routes
@@ -513,4 +610,60 @@ func (c *Client) getCurrentUserToken(ctx context.Context) (string, error) {
 	}
 
 	return "", fmt.Errorf("no authentication token available")
+}
+
+// GetPodLogs gets logs from a pod
+func (c *Client) GetPodLogs(ctx context.Context, namespace, podName, containerName string) (io.ReadCloser, error) {
+	req := c.clientset.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
+		Container: containerName,
+		Follow:    false,
+	})
+
+	return req.Stream(ctx)
+}
+
+// GetPodLogsStream gets logs from a pod with streaming support
+func (c *Client) GetPodLogsStream(ctx context.Context, namespace, podName, containerName string, follow bool) (io.ReadCloser, error) {
+	req := c.clientset.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
+		Container: containerName,
+		Follow:    follow,
+	})
+
+	return req.Stream(ctx)
+}
+
+// GetJobPodLogs gets logs from the first pod of a completed job
+func (c *Client) GetJobPodLogs(ctx context.Context, jobName, namespace string) (string, error) {
+	// Get pods for the job
+	labelSelector := fmt.Sprintf("job-name=%s", jobName)
+	pods, err := c.ListPods(ctx, namespace, labelSelector)
+	if err != nil {
+		return "", fmt.Errorf("failed to list pods for job %s: %w", jobName, err)
+	}
+
+	if len(pods.Items) == 0 {
+		return "", fmt.Errorf("no pods found for job %s", jobName)
+	}
+
+	// Get logs from the first pod
+	pod := pods.Items[0]
+	logStream, err := c.GetPodLogs(ctx, namespace, pod.Name, "")
+	if err != nil {
+		return "", fmt.Errorf("failed to get logs for pod %s: %w", pod.Name, err)
+	}
+	defer logStream.Close()
+
+	// Read all logs
+	var logs strings.Builder
+	scanner := bufio.NewScanner(logStream)
+	for scanner.Scan() {
+		logs.WriteString(scanner.Text())
+		logs.WriteString("\n")
+	}
+
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("error reading pod logs: %w", err)
+	}
+
+	return logs.String(), nil
 }

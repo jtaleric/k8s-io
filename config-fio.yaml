@@ -10,7 +10,7 @@ workload:
     # Basic FIO settings
     kind: "pod"              # "pod" or "vm"
     servers: 3               # Number of FIO server pods/VMs
-    samples: 5               # Number of test iterations
+    samples: 2               # Number of test iterations
     jobs: ["write", "read", "randwrite"]  # FIO job types
     bs: ["4KiB","8KiB", "16KiB"]             # Block sizes
     numjobs: [3]             # Number of FIO processes per pod
