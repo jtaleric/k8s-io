@@ -8,16 +8,23 @@ import (
 
 	"github.com/jtaleric/k8s-io/pkg/config"
 	"github.com/jtaleric/k8s-io/pkg/kubernetes"
+	"github.com/jtaleric/k8s-io/pkg/version"
 	"github.com/jtaleric/k8s-io/pkg/workloads"
 )
 
 func main() {
 	var (
-		configFile = flag.String("config", "config.yaml", "Path to configuration file")
-		cleanup    = flag.Bool("cleanup", false, "Cleanup resources and exit")
-		dryRun     = flag.Bool("dry-run", false, "Generate manifests without applying them")
+		configFile  = flag.String("config", "config.yaml", "Path to configuration file")
+		cleanup     = flag.Bool("cleanup", false, "Cleanup resources and exit")
+		dryRun      = flag.Bool("dry-run", false, "Generate manifests without applying them")
+		showVersion = flag.Bool("version", false, "Print version information and exit")
 	)
 	flag.Parse()
+
+	if *showVersion {
+		version.Print()
+		return
+	}
 
 	log.Println("Starting K8s-IO benchmark tool...")
 
