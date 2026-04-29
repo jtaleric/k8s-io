@@ -8,6 +8,9 @@ on:
 env:
   GO_VER: "1.21"
 
+permissions:
+  contents: write
+
 jobs:
   build-binaries:
     name: GoReleaser build
